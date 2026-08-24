@@ -2,6 +2,7 @@
 //! definition, the system prompt, and the last block of the 2 most recent messages.
 
 pub(crate) mod bedrock;
+pub(crate) mod oauth;
 pub(crate) mod shared;
 
 use std::sync::{Arc, Mutex};
@@ -241,10 +242,27 @@ fn resolve_anthropic_base_url() -> Option<String> {
 }
 
 fn resolve_auth_from_key(key: &str, base_url: Option<String>) -> super::ResolvedAuth {
-    super::ResolvedAuth {
-        base_url,
-        headers: vec![("x-api-key".into(), key.to_string())],
+    if oauth::is_oauth_token(key) {
+        super::ResolvedAuth {
+            base_url,
+            headers: vec![("authorization".into(), format!("Bearer {key}"))],
+        }
+    } else {
+        super::ResolvedAuth {
+            base_url,
+            headers: vec![("x-api-key".into(), key.to_string())],
+        }
     }
+}
+
+fn resolve_anthropic_key_pool() -> Result<KeyPool, AgentError> {
+    if let Ok(pool) = KeyPool::from_env(ENV_VAR) {
+        return Ok(pool);
+    }
+    if let Ok(pool) = KeyPool::from_env("CLAUDE_CODE_OAUTH_TOKEN") {
+        return Ok(pool);
+    }
+    KeyPool::resolve("anthropic", ENV_VAR)
 }
 
 pub struct Anthropic {
@@ -260,10 +278,17 @@ pub struct Anthropic {
 
 impl Anthropic {
     pub fn new(timeouts: super::Timeouts) -> Result<Self, AgentError> {
-        let pool = KeyPool::resolve("anthropic", ENV_VAR)?;
+        let pool = resolve_anthropic_key_pool()?;
         let resolved_base_url = resolve_anthropic_base_url();
         let resolved = resolve_auth_from_key(pool.current(), resolved_base_url.clone());
-        debug!(keys = pool.len(), "using API key authentication");
+        if oauth::is_oauth_token(pool.current()) {
+            debug!(
+                keys = pool.len(),
+                "using Anthropic OAuth subscription authentication"
+            );
+        } else {
+            debug!(keys = pool.len(), "using API key authentication");
+        }
         Ok(Self {
             client: super::http_client(timeouts),
             auth: Arc::new(Mutex::new(resolved)),
@@ -300,13 +325,26 @@ impl Anthropic {
         let auth = self.auth.lock().unwrap();
         let base = auth.base_url.as_deref().unwrap_or(API_ORIGIN);
         let url = format!("{}{path}", origin(base));
-        auth.configure_request(
-            Request::builder()
-                .method(method)
-                .uri(url)
-                .header("anthropic-version", API_VERSION)
-                .header("user-agent", super::user_agent()),
-        )
+        let is_oauth = oauth::is_oauth_auth(&auth);
+        let user_agent = if is_oauth {
+            oauth::build_user_agent()
+        } else {
+            super::user_agent().to_string()
+        };
+        let mut builder = Request::builder()
+            .method(method)
+            .uri(url)
+            .header("anthropic-version", API_VERSION)
+            .header("user-agent", user_agent);
+        if is_oauth {
+            builder = builder
+                .header("x-app", "cli")
+                .header(
+                    "x-client-request-id",
+                    maki_storage::id::MakiId::generate().to_string(),
+                );
+        }
+        auth.configure_request(builder)
     }
 
     async fn do_stream_request(
@@ -320,7 +358,11 @@ impl Anthropic {
         let mut builder = self
             .build_request("POST", MESSAGES_PATH)
             .header("content-type", "application/json");
+        let is_oauth = oauth::is_oauth_auth(&self.auth.lock().unwrap());
         let mut betas = Vec::new();
+        if is_oauth {
+            betas.push(OAUTH_BETA);
+        }
         if fast {
             betas.push(FAST_MODE_BETA);
         }
@@ -414,6 +456,7 @@ impl Provider for Anthropic {
                 }]
             };
 
+            let is_oauth = oauth::is_oauth_auth(&self.auth.lock().unwrap());
             let mut body = shared::build_request_body_with_system(
                 model,
                 messages,
@@ -423,10 +466,13 @@ impl Provider for Anthropic {
             );
             body["model"] = json!(shared::strip_long_context(&model.id));
             body["stream"] = json!(true);
+            if is_oauth {
+                oauth::transform_for_oauth(&mut body, &system_blocks, messages);
+            }
             let fast = apply_fast_mode(&mut body, model, opts);
             let long_context = model.id.ends_with(shared::LONG_CONTEXT_SUFFIX);
 
-            debug!(model = %model.id, num_messages = messages.len(), thinking = ?opts.thinking, fast, long_context, "sending API request");
+            debug!(model = %model.id, num_messages = messages.len(), thinking = ?opts.thinking, fast, long_context, is_oauth, "sending API request");
             self.do_stream_request(&body, event_tx, fast, long_context)
                 .await
         })
@@ -438,10 +484,10 @@ impl Provider for Anthropic {
 
     fn reload_auth(&self) -> BoxFuture<'_, Result<(), AgentError>> {
         Box::pin(async {
-            let pool = KeyPool::resolve("anthropic", ENV_VAR)?;
+            let pool = resolve_anthropic_key_pool()?;
             *self.auth.lock().unwrap() =
                 resolve_auth_from_key(pool.current(), self.resolved_base_url.clone());
-            debug!("reloaded Anthropic auth from env");
+            debug!("reloaded Anthropic auth");
             Ok(())
         })
     }

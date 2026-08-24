@@ -2881,6 +2881,7 @@ dependencies = [
  "thiserror 2.0.18",
  "toml",
  "tracing",
+ "uuid",
  "wait-timeout",
 ]
 
