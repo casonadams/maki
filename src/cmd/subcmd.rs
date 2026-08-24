@@ -77,6 +77,7 @@ fn login_provider(slug: &str, storage: &StateDir) -> Result<()> {
     let api_key_optional = needs_url;
     let login_url = resolve_login_url(slug, plan.as_deref());
     let api_key = prompt_api_key(
+        slug,
         login_url.as_deref(),
         &resolve_display_name(slug, def.as_ref()),
         api_key_optional,
@@ -387,14 +388,24 @@ fn prompt_host_url(slug: &str, display_name: &str, def: Option<&ProviderDef>) ->
     Ok(if url.is_empty() { default } else { url })
 }
 
-fn prompt_api_key(url: Option<&str>, display_name: &str, optional: bool) -> Result<String> {
+fn prompt_api_key(
+    slug: &str,
+    url: Option<&str>,
+    display_name: &str,
+    optional: bool,
+) -> Result<String> {
     if let Some(url) = url {
         if let Err(e) = open::that(url) {
             tracing::warn!(error = %e, "failed to open browser");
         }
         println!("  Opened {} in your browser.", url);
     }
-    if optional {
+    if slug == "anthropic" {
+        println!(
+            "  For Claude Pro/Max plans, run `claude setup-token` to generate an OAuth token (sk-ant-oat...)."
+        );
+        print!("  Anthropic API key or OAuth token: ");
+    } else if optional {
         print!("  {} API key (or Enter to skip): ", display_name);
     } else {
         print!("  {} API key: ", display_name);

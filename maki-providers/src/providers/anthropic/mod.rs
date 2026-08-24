@@ -337,12 +337,10 @@ impl Anthropic {
             .header("anthropic-version", API_VERSION)
             .header("user-agent", user_agent);
         if is_oauth {
-            builder = builder
-                .header("x-app", "cli")
-                .header(
-                    "x-client-request-id",
-                    maki_storage::id::MakiId::generate().to_string(),
-                );
+            builder = builder.header("x-app", "cli").header(
+                "x-client-request-id",
+                maki_storage::id::MakiId::generate().to_string(),
+            );
         }
         auth.configure_request(builder)
     }

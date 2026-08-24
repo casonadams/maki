@@ -725,6 +725,7 @@ impl LoginPicker {
             }
             Step::EnterKey {
                 input,
+                slug,
                 display_name,
                 api_key_optional,
                 ..
@@ -738,6 +739,8 @@ impl LoginPicker {
                 let t = theme::current();
                 let hint_text = if *api_key_optional {
                     "Paste API key, or Enter to skip"
+                } else if slug == "anthropic" {
+                    "Paste API key or OAuth token (run 'claude setup-token'), then Enter"
                 } else {
                     "Paste API key, then Enter"
                 };
