@@ -20,12 +20,7 @@ use crate::theme;
 pub enum PermissionOption {
     AllowOnce,
     AllowSession,
-    AllowAlwaysLocal,
-    AllowAlwaysGlobal,
-    Deny,
     DenyWithGuidance,
-    DenyAlwaysLocal,
-    DenyAlwaysGlobal,
 }
 
 struct PermissionMenuItem {
@@ -46,34 +41,9 @@ const MENU_ITEMS: &[PermissionMenuItem] = &[
         option: PermissionOption::AllowSession,
     },
     PermissionMenuItem {
-        label: "Always allow (project)",
-        desc: "  Save allow rule to project config",
-        option: PermissionOption::AllowAlwaysLocal,
-    },
-    PermissionMenuItem {
-        label: "Always allow (all projects)",
-        desc: "  Save allow rule to global config",
-        option: PermissionOption::AllowAlwaysGlobal,
-    },
-    PermissionMenuItem {
-        label: "Deny",
-        desc: "  Deny this invocation",
-        option: PermissionOption::Deny,
-    },
-    PermissionMenuItem {
         label: "Deny with guidance",
         desc: "  Deny and provide feedback to the model",
         option: PermissionOption::DenyWithGuidance,
-    },
-    PermissionMenuItem {
-        label: "Always deny (project)",
-        desc: "  Save deny rule to project config",
-        option: PermissionOption::DenyAlwaysLocal,
-    },
-    PermissionMenuItem {
-        label: "Always deny (all projects)",
-        desc: "  Save deny rule to global config",
-        option: PermissionOption::DenyAlwaysGlobal,
     },
 ];
 
@@ -245,15 +215,10 @@ impl PermissionPrompt {
             KeyCode::Enter => match MENU_ITEMS[*selected].option {
                 PermissionOption::AllowOnce => Some(PermissionAnswer::AllowOnce),
                 PermissionOption::AllowSession => Some(PermissionAnswer::AllowSession),
-                PermissionOption::AllowAlwaysLocal => Some(PermissionAnswer::AllowAlwaysLocal),
-                PermissionOption::AllowAlwaysGlobal => Some(PermissionAnswer::AllowAlwaysGlobal),
-                PermissionOption::Deny => Some(PermissionAnswer::Deny),
                 PermissionOption::DenyWithGuidance => {
                     *state = PromptState::DenyEditing;
                     None
                 }
-                PermissionOption::DenyAlwaysLocal => Some(PermissionAnswer::DenyAlwaysLocal),
-                PermissionOption::DenyAlwaysGlobal => Some(PermissionAnswer::DenyAlwaysGlobal),
             },
             KeyCode::Esc => Some(PermissionAnswer::Deny),
             _ => None,
@@ -447,9 +412,6 @@ mod tests {
         let mut prompt2 = open_prompt();
         prompt2.handle_key(key(KeyCode::Down));
         prompt2.handle_key(key(KeyCode::Down));
-        prompt2.handle_key(key(KeyCode::Down));
-        prompt2.handle_key(key(KeyCode::Down));
-        prompt2.handle_key(key(KeyCode::Down));
         prompt2.handle_key(key(KeyCode::Enter));
         prompt2.handle_key(key(KeyCode::Char('t')));
         assert_eq!(prompt2.handle_key(ctrl_c()), Some(PermissionAnswer::Deny));
@@ -493,63 +455,18 @@ mod tests {
         let mut prompt = open_prompt();
         prompt.handle_key(key(KeyCode::Down));
         prompt.handle_key(key(KeyCode::Down));
-        assert_eq!(
-            prompt.handle_key(key(KeyCode::Enter)),
-            Some(PermissionAnswer::AllowAlwaysLocal)
-        );
-
-        let mut prompt = open_prompt();
-        prompt.handle_key(key(KeyCode::Down));
-        prompt.handle_key(key(KeyCode::Down));
-        prompt.handle_key(key(KeyCode::Down));
-        assert_eq!(
-            prompt.handle_key(key(KeyCode::Enter)),
-            Some(PermissionAnswer::AllowAlwaysGlobal)
-        );
-
-        let mut prompt = open_prompt();
-        prompt.handle_key(key(KeyCode::Down));
-        prompt.handle_key(key(KeyCode::Down));
-        prompt.handle_key(key(KeyCode::Down));
-        prompt.handle_key(key(KeyCode::Down));
-        assert_eq!(
-            prompt.handle_key(key(KeyCode::Enter)),
-            Some(PermissionAnswer::Deny)
-        );
-
-        let mut prompt = open_prompt();
-        for _ in 0..6 {
-            prompt.handle_key(key(KeyCode::Down));
+        assert_eq!(prompt.handle_key(key(KeyCode::Enter)), None);
+        if let PermissionPrompt::Open { state, .. } = &prompt {
+            assert_eq!(*state, PromptState::DenyEditing);
+        } else {
+            panic!("expected Open");
         }
-        assert_eq!(
-            prompt.handle_key(key(KeyCode::Enter)),
-            Some(PermissionAnswer::DenyAlwaysLocal)
-        );
-
-        let mut prompt = open_prompt();
-        for _ in 0..20 {
-            prompt.handle_key(key(KeyCode::Down));
-        }
-        assert_eq!(
-            prompt.handle_key(key(KeyCode::Enter)),
-            Some(PermissionAnswer::DenyAlwaysGlobal)
-        );
-
-        prompt = open_prompt();
-        for _ in 0..7 {
-            prompt.handle_key(key(KeyCode::Down));
-        }
-        prompt.handle_key(key(KeyCode::Up));
-        assert_eq!(
-            prompt.handle_key(key(KeyCode::Enter)),
-            Some(PermissionAnswer::DenyAlwaysLocal)
-        );
     }
 
     #[test]
     fn deny_with_guidance_flow() {
         let mut prompt = open_prompt();
-        for _ in 0..5 {
+        for _ in 0..2 {
             prompt.handle_key(key(KeyCode::Down));
         }
         assert_eq!(prompt.handle_key(key(KeyCode::Enter)), None);
@@ -575,7 +492,7 @@ mod tests {
         );
 
         let mut prompt = open_prompt();
-        for _ in 0..5 {
+        for _ in 0..2 {
             prompt.handle_key(key(KeyCode::Down));
         }
         prompt.handle_key(key(KeyCode::Enter));
@@ -603,7 +520,7 @@ mod tests {
     fn handle_paste_requires_editing_mode() {
         let mut prompt = open_prompt();
         assert!(!prompt.handle_paste("ignored"));
-        for _ in 0..5 {
+        for _ in 0..2 {
             prompt.handle_key(key(KeyCode::Down));
         }
         prompt.handle_key(key(KeyCode::Enter));
@@ -718,6 +635,6 @@ mod tests {
 
     #[test]
     fn menu_items_count() {
-        assert_eq!(MENU_ITEMS.len(), 8);
+        assert_eq!(MENU_ITEMS.len(), 3);
     }
 }
