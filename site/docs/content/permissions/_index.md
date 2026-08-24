@@ -144,19 +144,18 @@ Tool names must match `^[a-zA-Z0-9_-]{1,64}$` (no dots, max 64 chars). Server na
 
 ## Permission Prompts
 
-When a gated tool needs permission, Maki asks you.
+When a gated tool needs permission, Maki displays an interactive menu. Use `↑` / `↓` (or `Tab` / `BackTab`) to navigate options and `Enter` to confirm:
 
-| Key | Action |
-|-----|--------|
-| `y` | Allow once (immediate) |
-| `s` | Allow for this session (confirm with `Enter` or `y`; any other key cancels) |
-| `a` | Always allow for this project (confirm; saved to `.maki/permissions.toml`) |
-| `A` | Always allow globally (confirm; saved to `~/.config/maki/permissions.toml`) |
-| `n` | Open deny guidance editor (type optional guidance, then `Enter` to deny once; `Esc` cancels) |
-| `d` | Deny always for this project (confirm) |
-| `D` | Deny always globally (confirm) |
+- **Allow**: Allow this single invocation
+- **Allow for session**: Allow for the remainder of this session
+- **Always allow (project)**: Save allow rule to `.maki/permissions.toml`
+- **Always allow (all projects)**: Save allow rule to `~/.config/maki/permissions.toml`
+- **Deny**: Deny this invocation
+- **Deny with guidance**: Open text input to provide instructions to the agent before denying
+- **Always deny (project)**: Save deny rule to `.maki/permissions.toml`
+- **Always deny (all projects)**: Save deny rule to `~/.config/maki/permissions.toml`
 
-Session and always-allow / always-deny choices need a second key (`Enter` or `y`) so a fat-finger does not rewrite your rules. Deny-once with `n` lets you type a short reason the agent will see.
+Press `Esc` or `⌃C` at any time to deny. Choosing **Deny with guidance** opens a prompt where you can type instructions and hit `Enter` to submit, or `Esc` to return to the option list.
 
 ### Scope Generalization
 
